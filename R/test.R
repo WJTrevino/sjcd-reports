@@ -1,3 +1,4 @@
-test <- function() {
-  print("test")
+test <- function(data) {
+  tbl <- tidyr::as_tibble(jsonlite::fromJSON(data))
+  print(tbl)
 }
