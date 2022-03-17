@@ -1,4 +1,4 @@
-Package: sjcd-reports
+Package: sjcdreports
 Version: 0.01-1
 Date: 2022-03-16
 Authors@R: c(
