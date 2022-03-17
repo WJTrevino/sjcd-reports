@@ -1,7 +1,9 @@
 Package: sjcd-reports
 Version: 0.01-1
 Date: 2022-03-16
-Authors@R: c(person("Westley", "Trevino", role=c("aut","cre", email="Westley.Trevino@sjcd.edu"),person("San Jacinto College", role="cph"))
+Authors@R: c(
+  person("Westley", "Trevino", role=c("aut","cre"), email="Westley.Trevino@sjcd.edu"),
+  person("San Jacinto College", role="cph"))
 License: MIT
 Title: Automated Analysis of Report Data
 Description: Wrapper package for OpenCPU automated processing of regressions and reporting,
