@@ -1,6 +1,7 @@
 # Package Dependencies and Declarations ======================================
 
 library(tidyverse)
+library(dplyr)
 
 # Helper Functions ===========================================================
 .TrimData <- function(data) {}
