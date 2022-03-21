@@ -46,7 +46,7 @@
   model <- glm(frm, quasipoisson, data = data)
   list(groups = summary,
        effects = .EstimateEffects(model),
-       pvalues = .PValues(data[[y]], data[[x]]))
+       pvalues = .TPValues(data[[y]], data[[x]]))
 }
 
 
