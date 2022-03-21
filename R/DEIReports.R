@@ -75,5 +75,5 @@ DEIReports <- function(str) {
   
   # Return Values ------------------------------------------------------------
   
-  .DoAnalysis(data,"score","race")
+  jsonlite::toJSON(.DoAnalysis(data,"score","race"))
 }
