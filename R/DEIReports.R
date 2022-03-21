@@ -1,8 +1,6 @@
 # Package Dependencies and Declarations ======================================
 
-library(tidyverse)
-library(dplyr)
-library(magrittr)
+
 
 # Helper Functions ===========================================================
 .TrimData <- function(data) {}
@@ -46,7 +44,6 @@ library(magrittr)
   
   frm <- reformulate(x, response = y, intercept = FALSE)
   model <- glm(frm, quasipoisson, data = data)
-  print(model$terms)
   list(groups = summary,
        effects = .EstimateEffects(model),
        pvalues = .PValues(data[[y]], data[[x]]))
@@ -54,7 +51,9 @@ library(magrittr)
 
 
 DEIReports <- function(str) {
-  
+  library(tidyverse)
+  library(dplyr)
+  library(magrittr)
   data <- dplyr::as_tibble(jsonlite::fromJSON(str))
   
   # Import Data --------------------------------------------------------------
