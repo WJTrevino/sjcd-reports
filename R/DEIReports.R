@@ -2,6 +2,7 @@
 
 library(tidyverse)
 library(dplyr)
+library(magrittr)
 
 # Helper Functions ===========================================================
 .TrimData <- function(data) {}
