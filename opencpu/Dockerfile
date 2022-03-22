@@ -4,4 +4,4 @@ RUN useradd --create-home --shell /bin/bash sjcd
 WORKDIR /home/sjcd
 # COPY . .
 
-EXPOSE 8004
+#EXPOSE 8004

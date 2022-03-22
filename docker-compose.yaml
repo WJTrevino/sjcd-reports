@@ -1,0 +1,27 @@
+version: "3.4"
+services:
+  node:
+    # image: "node:17"
+    build:
+      context: ./node
+      network: host
+      dockerfile: Dockerfile
+    user: node
+    working_dir: /home/node/app
+    environment:
+      - MYSQL_CONNECTION="test"
+    volumes:
+      - ./node:/home/node/app
+    ports:
+      - 3000:3000
+    command: "npm run dev"
+  ocpu:
+    # image: opencpu/rstudio
+    build:
+      context: ./opencpu
+      network: host
+      dockerfile: Dockerfile
+    # volumes:
+    #   - ./opencpu:/home/sjcd
+    ports:
+      - 8004:8004
