@@ -21,7 +21,7 @@ services:
       context: ./opencpu
       network: host
       dockerfile: Dockerfile
-    # volumes:
-    #   - ./opencpu:/home/sjcd
+    volumes:
+      - ./opencpu:/home/sjcd
     ports:
       - 8004:8004

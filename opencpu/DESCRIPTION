@@ -1,11 +1,22 @@
 Package: sjcdreports
-Version: 0.01-1
+Version: 0.01-2
 Date: 2022-03-16
 Authors@R: c(
   person("Westley", "Trevino", role=c("aut","cre"), email="Westley.Trevino@sjcd.edu"),
   person("San Jacinto College", role="cph"))
-License: MIT
-Title: Automated Analysis of Report Data
-Description: Wrapper package for OpenCPU automated processing of regressions and reporting,
-  written for San Jacinto College. Returns small JSON-compatible objects to be presented
-  by React.
+License: MIT + file LICENSE
+Depends:
+  rlang
+Imports:
+  dplyr,
+  tidyr,
+  tibble,
+  purrr,
+  forcats,
+  stringr,
+  magrittr,
+  jsonlite
+Title: Automated Analysis of Equity Report Data
+Description: OpenCPU wrapper for automated processing of regressions
+  and reporting, written for San Jacinto College. Returns small JSON-compatible
+  objects to be presented by React.

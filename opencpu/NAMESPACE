@@ -1,1 +1,4 @@
+importFrom("stats", "coef", "glm", "pairwise.t.test", "quasipoisson", "reformulate")
+importFrom("magrittr", "%>%", "%<>%")
+importFrom("rlang", ".data")
 export(DEIReports)
