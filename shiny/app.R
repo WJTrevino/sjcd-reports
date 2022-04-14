@@ -16,7 +16,7 @@ ui <- fluidPage(
     conditionalPanel(
         condition = "input.file",
         conditionalPanel(
-          condition = "output.validateData == '1'",
+          condition = "output.dataValid == '1'",
           hr(),
           h4("About This Exam"),
           div("Name: ", textOutput("examName", inline = TRUE)),
@@ -33,6 +33,7 @@ ui <- fluidPage(
   ),
   mainPanel(
     textOutput("file"),
+    verbatimTextOutput("sqlData"),
     verbatimTextOutput("joinedData"),
     verbatimTextOutput("helper")
   )
@@ -56,12 +57,17 @@ server <- function(input, output, session) {
     on.exit(progress$close())
     
     tryCatch({
-      data <- sheetNames %>%
+      sheetNames %>%
         set_names() %>%
         map(function(x) {
           progress$inc(amount = 1, message = "Processing Sheets")
         # map(read_xlsx, path = input$file$datapath, .name_repair = "minimal")
-          read_xlsx(x, path = input$file, .name_repair = "minimal")
+          read_xlsx(
+            x,
+            path = input$file,
+            na = c("--"),
+            .name_repair = "minimal"
+          )
         })
     },
     warning = function(e) {
@@ -70,20 +76,11 @@ server <- function(input, output, session) {
     error = function(e) {
       NA # Silently swallow error.
     })
-
-    # data %<>%
-    #   purrr::modify_if(is.character, as.factor) %>%
-      # purrr::modify_at("sid", as.character) %>%
-      # dplyr::mutate(
-      #   race = forcats::fct_other(
-      #     race, drop = "Unknown or Not Reported")) %>%
-      # dplyr::mutate(pell = forcats::fct_other(pell, drop = "Unkn"))
   })
   
   validateData <- reactive({
     validate(
-      need(input$file, "Waiting for file."),
-      need(data(), "Invalid data.")
+      need(input$file, "Waiting for file.")
     )
     d <- data()
     m <- "Invalid Formatting"
@@ -91,27 +88,36 @@ server <- function(input, output, session) {
       need(d$'Summary Statistics'[[2,1]] == "Scorable Questions", m),
       need(d$'Summary Statistics'[[2,2]] > 0, m)
     )
-    "1"
+    "Valid"
+  })
+
+  dataValid <- reactive({
+    ifelse(validateData() == "Valid", TRUE, FALSE)
+  })
+  output$dataValid <- renderText({
+    ifelse(dataValid(), "1", "0")
   })
   
   sqlData <- reactive({
-    read_json("test.json", simplifyVector = TRUE) %>% tibble
+    read_json("../secrets/test.json", simplifyVector = TRUE) %>% tibble
   })
   output$sqlData <- renderPrint({ sqlData() })
   
   joinedData <- reactive({
     d <- req(data()$'Student Questions')
     s <- req(sqlData())
-    left_join(d, s, by = c("Student_id" = "sid"))
+    left_join(d, s, by = c("Student_id" = "sid")) %>%
+      purrr::modify_if(is.character, as.factor) %>%
+      purrr::modify_at("Student_id", as.character) %>%
+      dplyr::mutate(
+        race = forcats::fct_other(
+          race, drop = "Unknown or Not Reported")) %>%
+      dplyr::mutate(pell = forcats::fct_other(pell, drop = "Unkn"))
   })
   output$joinedData <- renderPrint({ joinedData() })
-  
-  output$dataValid <- renderText({
-    validateData()
-  })
 
   output$examName <- renderText({
-    req(validateData())
+    req(dataValid())
     d <- data()
     sub(" (**Webcam**) - Requires Respondus LockDown Browser",
         "",
@@ -120,7 +126,7 @@ server <- function(input, output, session) {
   })
   
   output$nQuestions = renderText({
-    req(validateData())
+    req(dataValid())
     d <- data()
     d$'Summary Statistics'[[2,2]]
   })
@@ -130,8 +136,7 @@ server <- function(input, output, session) {
   })
   
   output$helper <- renderPrint({
-    data()
-    .DoAnalysis(isolate(joinedData()), "Total", "race")
+    .DoAnalysis(joinedData(), "Total", "race")
   })
 }
 
