@@ -35,7 +35,8 @@ ui <- fluidPage(
     textOutput("file"),
     verbatimTextOutput("sqlData"),
     verbatimTextOutput("joinedData"),
-    verbatimTextOutput("helper")
+    verbatimTextOutput("helper"),
+    uiOutput("groups")
   )
 )
 
@@ -90,7 +91,7 @@ server <- function(input, output, session) {
     )
     "Valid"
   })
-
+  
   dataValid <- reactive({
     ifelse(validateData() == "Valid", TRUE, FALSE)
   })
@@ -121,7 +122,7 @@ server <- function(input, output, session) {
     d <- data()
     sub(" (**Webcam**) - Requires Respondus LockDown Browser",
         "",
-        d$`Test Info`[1,1],
+        # d$`Test Info`[1,1],
         fixed = TRUE)
   })
   
@@ -138,74 +139,12 @@ server <- function(input, output, session) {
   output$helper <- renderPrint({
     .DoAnalysis(joinedData(), "Total", "race")
   })
-}
-
-# Embedded Helper Functions ==================================================
-
-.Summarize <- function(data, y, x) {
-  data %<>%
-    dplyr::group_by(.data[[x]]) %>%
-    dplyr::summarize(mean = mean(.data[[y]]), n = n()) %>%
-    dplyr::arrange(desc(n))
   
-  colnames(data)[[1]] <- "group"
-  
-  data %>%
-    dplyr::mutate(mean = ifelse(group == "Other", NA_integer_, mean))  # mask "Other"
-}
-
-.QPEstimateEffects <- function(model, x) {
-  v <- coef(model)
-  names(v) <- sub(x, "", names(v))
-  est <- outer(v, v, function(x,y) (exp(x-y)-1)*100)
-  tibble::as_tibble(est) %>%
-    tibble::add_column(group = names(v), .before = 1)
-}
-
-
-.TPValues = function(x, y) {
-  test = pairwise.t.test(x, y)
-  p = test$p.value
-  tibble::as_tibble(p) %>%
-    tibble::add_column(group = row.names(p), .before = 1)
-}
-
-
-.DoAnalysis <-  function(data, y, x, n = 3) {
-  result <- list(
-    error =  FALSE,
-    context = y,
-    lens = x
-  )
-
-  data %<>%
-    dplyr::filter(!is.na(.data[[y]])) %>%
-    dplyr::mutate(x = fct_infreq(x)) %>%
-    dplyr::mutate(x = fct_lump_min(x, min = 3))
-
-  result[["summary"]] <-  .Summarize(data, y, x)
-
-  data %<>%
-    dplyr::filter(.data[[x]] != "Other")
-
-  if(nrow(result[["summary"]]) > 2) {
-    frm <- reformulate(x, response = y, intercept = FALSE)
-    model <- glm(frm, quasipoisson, data = data)
-    result[["effects"]] <- .QPEstimateEffects(model, x)
-    result[["pvalues"]] <- .TPValues(data[[y]], data[[x]])
-  } else {
-    result[["error"]] = TRUE
-    result[["message"]] = "Cannot run analysis with one group."
-  }
-
-  # list(
-  #   summary = summary,
-  #   effects = .QPEstimateEffects(model, x),
-  #   pvalues = .TPValues(data[[y]], data[[x]]),
-  #   context = y,
-  #   lens = x
-  # )
-  result
+  output$groups <- renderUI({
+    lapply(1:10, function(x) {
+      h4(x)
+    })
+  })
 }
 
 # Return App Object ==========================================================
