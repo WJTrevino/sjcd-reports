@@ -39,4 +39,5 @@ vignettes/*.pdf
 .Renviron
 
 # Example Data (sensitive)
-secrets/
+secrets/*
+!secrets/secrets.md
