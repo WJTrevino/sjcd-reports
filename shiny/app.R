@@ -6,6 +6,9 @@ library(readxl)
 # trim when shipping
 library(tidyverse)
 
+# Load Helpers ===============================================================
+source("helpers.R")
+
 # UI Definition ==============================================================
 ui <- fluidPage(
   title = "EAC DEI Report",
