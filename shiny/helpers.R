@@ -1,11 +1,14 @@
-library(shiny)
-library(jsonlite)
-library(magrittr)
-library(readxl)
-# trim when shipping
-library(tidyverse)
-
 # Helper Functions for DEI Reports ============================================
+if(interactive()) {
+  library(shiny)
+  library(jsonlite)
+  library(magrittr)
+  library(readxl)
+  # trim when shipping
+  library(tidyverse)
+  # load shiny last so it is not masked
+  library(shiny)
+}
 
 .Summarize <- function(data, y, x) {
   data %<>%
@@ -30,11 +33,12 @@ library(tidyverse)
 .TPValues = function(data, x, y) {
   test <- pairwise.t.test(data[[x]], data[[y]])
   p <- test$p.value
-  tibble::as_tibble(p) %>%
+  last_group <- rownames(p)[-1]
+  p %<>%
+    tibble::as_tibble(.) %>%
     tibble::add_column(group = row.names(p), .before = 1) %>%
     tibble::add_row(group = colnames(.)[2], .before = 1) %>%
-    tibble::add_column("a" := NA, .after = Inf)
-  # Rename this column to match the last group!
+    tibble::add_column({{ last_group }} := NA, .after = Inf)
 }
 
 

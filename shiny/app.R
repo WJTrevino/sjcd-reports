@@ -1,53 +1,66 @@
 # Load Dependencies ==========================================================
-library(shiny)
 library(jsonlite)
 library(magrittr)
 library(readxl)
 # trim when shipping
 library(tidyverse)
+# load shiny last so it is not masked
+library(shiny)
 
 # Load Helpers ===============================================================
 source("helpers.R")
 
 # UI Definition ==============================================================
-ui <- fluidPage(
+ui <- shiny::fluidPage(
   title = "EAC DEI Report",
-  sidebarPanel(
-    h3("EAC DEI Report"),
-    # fileInput("file", "EAC Spreadsheet", accept = ".xlsx"),
-    textInput("file","Mock file upload (File path)"),
-    conditionalPanel(
+  shiny::sidebarPanel(
+    shiny::h3("EAC DEI Report"),
+    # shiny::fileInput("file", "EAC Spreadsheet", accept = ".xlsx"),
+    shiny::textInput("file","Mock file upload (File path)"),
+    shiny::conditionalPanel(
         condition = "input.file",
-        conditionalPanel(
-          condition = "output.dataValid == '1'",
-          hr(),
-          h4("About This Exam"),
-          div("Name: ", textOutput("examName", inline = TRUE)),
-          div("Students: ", textOutput("nStudents", inline = TRUE)),
-          div("Questions: ", textOutput("nQuestions", inline = TRUE)),
-          div("Questions: ", textOutput("nGoals", inline = TRUE)),
-          actionButton(
+        #shiny::conditionalPanel(
+          #condition = "output.dataValid == '1'",
+          shiny::h4("About This Exam"),
+          shiny::div(
+            "Name: ",
+            shiny::textOutput("examName", inline = TRUE)
+          ),
+          shiny::div(
+            "Students: ",
+            shiny::textOutput("nStudents", inline = TRUE)
+          ),
+          shiny::div(
+            "Questions: ",
+            shiny::textOutput("nQuestions", inline = TRUE)
+          ),
+          shiny::div(
+            "Questions: ",
+            shiny::textOutput("nGoals", inline = TRUE)
+          ),
+          shiny::actionButton(
             "doAnalysis",
             "Run Analysis",
-            icon = icon("calculator")
+            icon = shiny::icon("calculator")
           )
-        )
-    )
+        #)
+    ),
+    shiny::helpText(shiny::textOutput("status"))
   ),
-  mainPanel(
-    textOutput("file"),
-    verbatimTextOutput("sqlData"),
-    verbatimTextOutput("joinedData"),
-    verbatimTextOutput("helper"),
-    uiOutput("groups")
+  shiny::mainPanel(
+    shiny::textOutput("file"),
+    shiny::verbatimTextOutput("sqlData"),
+    shiny::verbatimTextOutput("joinedData"),
+    shiny::verbatimTextOutput("helper"),
+    shiny::uiOutput("groups")
   )
 )
 
 # Server Definition ==========================================================
 server <- function(input, output, session) {
-  data <- reactive({
-    # req(input$file$datapath)
-    req(input$file)
+  data <- shiny::reactive({
+    # shiny::req(input$file$datapath)
+    shiny::req(input$file)
     
     sheetNames = c(
       "Test Info",
@@ -62,13 +75,13 @@ server <- function(input, output, session) {
     
     tryCatch({
       sheetNames %>%
-        set_names() %>%
-        map(function(x) {
+        purrr::set_names() %>%
+        purrr::map(function(x) {
           progress$inc(amount = 1, message = "Processing Sheets")
-        # map(read_xlsx, path = input$file$datapath, .name_repair = "minimal")
-          read_xlsx(
+          readxl::read_xlsx(
             x,
             path = input$file,
+            # path = input$file$datapath,
             na = c("--"),
             .name_repair = "minimal"
           )
@@ -82,35 +95,36 @@ server <- function(input, output, session) {
     })
   })
   
-  validateData <- reactive({
-    validate(
-      need(input$file, "Waiting for file.")
+  validateData <- shiny::reactive({
+    shiny::validate(
+      shiny::need(input$file, "Waiting for file.")
     )
     d <- data()
     m <- "Invalid Formatting"
-    validate(
-      need(d$'Summary Statistics'[[2,1]] == "Scorable Questions", m),
-      need(d$'Summary Statistics'[[2,2]] > 0, m)
+    shiny::validate(
+      shiny::need(d$'Summary Statistics'[[2,1]] == "Scorable Questions", m),
+      shiny::need(d$'Summary Statistics'[[2,2]] > 0, m)
     )
     "Valid"
   })
   
-  dataValid <- reactive({
+  dataValid <- shiny::reactive({
     ifelse(validateData() == "Valid", TRUE, FALSE)
-  })
-  output$dataValid <- renderText({
+  }, label = "dataValid")
+  output$dataValid <- shiny::renderText({
     ifelse(dataValid(), "1", "0")
   })
   
-  sqlData <- reactive({
-    read_json("../secrets/test.json", simplifyVector = TRUE) %>% tibble
+  sqlData <- shiny::reactive({
+    jsonlite::read_json("../secrets/test.json", simplifyVector = TRUE) %>%
+    tibble::tibble(.)
   })
-  output$sqlData <- renderPrint({ sqlData() })
+  output$sqlData <- shiny::renderPrint({ sqlData() })
   
-  joinedData <- reactive({
-    d <- req(data()$'Student Questions')
-    s <- req(sqlData())
-    left_join(d, s, by = c("Student_id" = "sid")) %>%
+  joinedData <- shiny::reactive({
+    d <- shiny::req(data()$'Student Questions')
+    s <- shiny::req(sqlData())
+    dplyr::left_join(d, s, by = c("Student_id" = "sid")) %>%
       purrr::modify_if(is.character, as.factor) %>%
       purrr::modify_at("Student_id", as.character) %>%
       dplyr::mutate(
@@ -118,37 +132,40 @@ server <- function(input, output, session) {
           race, drop = "Unknown or Not Reported")) %>%
       dplyr::mutate(pell = forcats::fct_other(pell, drop = "Unkn"))
   })
-  output$joinedData <- renderPrint({ joinedData() })
+  output$joinedData <- shiny::renderPrint({ joinedData() })
 
-  output$examName <- renderText({
-    req(dataValid())
+  output$examName <- shiny::renderText({
+    shiny::req(dataValid())
     d <- data()
     sub(" (**Webcam**) - Requires Respondus LockDown Browser",
         "",
-        # d$`Test Info`[1,1],
+        d$`Test Info`[1,1],
         fixed = TRUE)
   })
   
-  output$nQuestions = renderText({
-    req(dataValid())
+  nQuestions <- shiny::renderText({
+    shiny::req(dataValid())
     d <- data()
     d$'Summary Statistics'[[2,2]]
   })
+  output$nQuestions <- shiny::renderText({ nQuestions() })
   
-  output$file <- renderText({
+  output$file <- shiny::renderText({
     input$file
   })
   
-  output$helper <- renderPrint({
+  output$helper <- shiny::renderPrint({
     .DoAnalysis(joinedData(), "Total", "race")
   })
   
-  output$groups <- renderUI({
-    lapply(1:10, function(x) {
-      h4(x)
+  output$status <- shiny::renderPrint({ validateData() })
+  
+  output$groups <- shiny::renderUI({
+    lapply(1:nQuestions(), function(x) {
+      shiny::h4(x)
     })
   })
 }
 
 # Return App Object ==========================================================
-shinyApp(ui = ui, server = server)
+shiny::shinyApp(ui = ui, server = server)
