@@ -93,7 +93,7 @@ server <- function(input, output, session) {
     error = function(e) {
       NA # Silently swallow error.
     })
-  })
+  }, label = "data")
   
   validateData <- shiny::reactive({
     shiny::validate(
@@ -106,7 +106,7 @@ server <- function(input, output, session) {
       shiny::need(d$'Summary Statistics'[[2,2]] > 0, m)
     )
     "Valid"
-  })
+  }, label = "validateData")
   
   dataValid <- shiny::reactive({
     ifelse(validateData() == "Valid", TRUE, FALSE)
@@ -118,7 +118,7 @@ server <- function(input, output, session) {
   sqlData <- shiny::reactive({
     jsonlite::read_json("../secrets/test.json", simplifyVector = TRUE) %>%
     tibble::tibble(.)
-  })
+  }, label = "sqlData")
   output$sqlData <- shiny::renderPrint({ sqlData() })
   
   joinedData <- shiny::reactive({
@@ -131,7 +131,7 @@ server <- function(input, output, session) {
         race = forcats::fct_other(
           race, drop = "Unknown or Not Reported")) %>%
       dplyr::mutate(pell = forcats::fct_other(pell, drop = "Unkn"))
-  })
+  }, label = "joinedData")
   output$joinedData <- shiny::renderPrint({ joinedData() })
 
   output$examName <- shiny::renderText({
