@@ -1,4 +1,5 @@
 # Helper Functions for DEI Reports ============================================
+# Dependencies are only run if debugging this file directly on a console.
 if(interactive()) {
   library(shiny)
   library(jsonlite)
@@ -8,6 +9,8 @@ if(interactive()) {
   library(tidyverse)
   # load shiny last so it is not masked
   library(shiny)
+  library(shinydashboard)
+  library(shinydashboardPlus)
 }
 
 .Summarize <- function(data, y, x) {
@@ -53,6 +56,7 @@ if(interactive()) {
     dplyr::filter(!is.na(.data[[y]])) %>%
     dplyr::mutate("{x}" := forcats::fct_infreq(.data[[x]])) %>%
     dplyr::mutate("{x}" := fct_lump_min(.data[[x]], min = 3)) %>%
+    # FIND A WAY TO MOVE OTHER TO END WITHOUT ERROR
     dplyr::mutate("{x}" := fct_relevel(.data[[x]], "Other", after = Inf))
   
   result$summary <-  .Summarize(data, y, x)
