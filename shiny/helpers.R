@@ -18,18 +18,18 @@ if(interactive()) {
     dplyr::group_by(.data[[x]]) %>%
     dplyr::summarize(mean = mean(.data[[y]]), n = n())
   
-  colnames(data)[[1]] <- "group"
+  colnames(data)[[1]] <- "Group"
   
   data %>%
-    dplyr::mutate(mean = ifelse(group == "Other", NA_integer_, mean))
+    dplyr::mutate(mean = ifelse(Group == "Other", NA_real_, mean))
 }
 
 .QPEstimateEffects <- function(model, x) {
   v <- coef(model)
   names(v) <- sub(x, "", names(v))
-  est <- outer(v, v, function(x,y) (exp(x-y)-1)*100)
+  est <- outer(v, v, function(x,y) { (exp(x-y)-1)*100 })
   tibble::as_tibble(est) %>%
-    tibble::add_column(group = names(v), .before = 1)
+    tibble::add_column(Group = names(v), .before = 1)
 }
 
 
@@ -39,9 +39,12 @@ if(interactive()) {
   last_group <- rownames(p)[-1]
   p %<>%
     tibble::as_tibble(.) %>%
-    tibble::add_column(group = row.names(p), .before = 1) %>%
-    tibble::add_row(group = colnames(.)[2], .before = 1) %>%
-    tibble::add_column({{ last_group }} := NA, .after = Inf)
+    tibble::add_row(.before = 1) %>%
+    tibble::add_column({{ last_group }} := 0, .after = Inf) %>%
+    purrr::map_df(function(x) { coalesce(x, 0) }) %>%
+    magrittr::add(t(.)) %>%
+    tibble::as_tibble(.) %>%
+    tibble::add_column(Group = colnames(.), .before = 1)
 }
 
 
