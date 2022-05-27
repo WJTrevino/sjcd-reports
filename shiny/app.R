@@ -1,6 +1,7 @@
 # Load Dependencies ==========================================================
 library("jsonlite")
 library("multcomp")
+library("emmeans")
 library("magrittr")
 library("readxl")
 # trim when shipping
@@ -59,18 +60,19 @@ ui <- shiny::fluidPage(
     shiny::helpText(shiny::textOutput("status"))
   ),
   shiny::mainPanel(
-    shiny::textOutput("file"),
-    shiny::verbatimTextOutput("joinedData"),
-    shiny::verbatimTextOutput("helper"),
-    shiny::uiOutput("detailOutput")
+    shiny::verbatimTextOutput("helper")
   )
 )
 
 # Server Definition ==========================================================
 server <- function(input, output, session) {
   data <- shiny::reactive({
-    # shiny::req(input$file$datapath)
-    shiny::req(input$file)
+    return(.LoadData(shiny::req(input$file)))
+   #return(.LoadData(shiny::req(input$file$datapath)))
+  }, label = "data")
+  
+  .LoadData = function(path = NULL, shiny_app = TRUE) {
+    stopifnot(is.character(path))
     
     sheetNames = c(
       "Test Info",
@@ -81,30 +83,34 @@ server <- function(input, output, session) {
       "Student Goals",
       "Goals Summary"
     )
-    progress <- shiny::Progress$new(max = length(sheetNames))
-    on.exit(progress$close())
+    
+    if(shiny_app){
+      progress <- shiny::Progress$new(max = length(sheetNames))
+      on.exit(progress$close())
+    }
     
     tryCatch({
-      sheetNames %>%
+      data <- sheetNames %>%
         purrr::set_names() %>%
         purrr::map(function(x) {
-          progress$inc(amount = 1, message = "Processing Sheets")
+          if (shiny_app) {
+            progress$inc(amount = 1, message = "Processing Sheets")
+          }
           readxl::read_xlsx(
             x,
-            path = input$file,
-            # path = input$file$datapath,
+            path = path,
             na = c("--"),
             .name_repair = "minimal"
           )
         })
-    },
-    warning = function(e) {
-      NA # Silently swallow error.
-    },
-    error = function(e) {
-      NA # Silently swallow error.
+    }, warning = function(e) {
+      NA # Silently swallow warnings.
+    }, error = function(e) {
+      NA # Silently swallow errors.
     })
-  }, label = "data")
+    
+    return(data)
+  }
   
   validateData <- shiny::reactive({
     shiny::validate(
@@ -118,7 +124,7 @@ server <- function(input, output, session) {
       shiny::need(d$'Summary Statistics'[[2,1]] == "Scorable Questions", m),
       shiny::need(d$'Summary Statistics'[[2,2]] > 0, m)
     )
-    "Valid"
+    return("Valid")
   }, label = "validateData")
   
   dataValid <- shiny::reactive({
@@ -130,40 +136,80 @@ server <- function(input, output, session) {
   
   sqlData <- shiny::reactive({
     jsonlite::read_json("../secrets/test.json", simplifyVector = TRUE) %>%
-    tibble::tibble(.)
+      tibble::tibble(.) %>%
+      return(.)
   }, label = "sqlData")
   output$sqlData <- shiny::renderPrint({ sqlData() })
   
-  joinedData <- shiny::reactive({
-    item_sheet <- shiny::req(data()$'Student Questions')
-    goal_names <- shiny::req(data()$'Goals Summary'$Goals)
-    goal_sheet <- shiny::req(data()$'Student Goals') %>%
-      dplyr::select(dplyr::any_of(c("Student_id", goal_names)))
-    sql_data <- shiny::req(sqlData())
+  .JoinData <- function(excel = NULL, sql_data = NULL) {
+    stopifnot(
+      is.list(excel),
+      is.data.frame(sql_data)
+    )
     
-    dplyr::left_join(item_sheet, sql_data, by = c("Student_id" = "sid")) %>%
-      dplyr::left_join(., goal_sheet, by = "Student_id") %>%
+    item_sheet <- excel$'Student Questions'
+    goal_names <- excel$'Goals Summary'$Goals
+    goal_sheet <- excel$'Student Goals' %>%
+      dplyr::select(dplyr::any_of(c("Student_id", goal_names)))
+    
+    join_data <- dplyr::left_join(
+        item_sheet,
+        sql_data,
+        by = c("Student_id" = "sid")
+      ) %>%
+      dplyr::left_join(
+        .,
+        goal_sheet,
+        by = "Student_id"
+      ) %>%
       dplyr::filter(!is.na(Student_id)) %>%
       purrr::modify_if(is.character, as.factor) %>%
       purrr::modify_at("Student_id", as.character) %>%
       dplyr::mutate(
         race = forcats::fct_other(
-          race, drop = "Unknown or Not Reported")) %>%
+          race,
+          drop = "Unknown or Not Reported"
+        )) %>%
       dplyr::mutate(pell = forcats::fct_other(pell, drop = "Unkn"))
+    
+    var_list <- c(
+      "race",
+      "gender",
+      "FT",
+      "FG",
+      "pell"
+    )
+    
+    for(x in var_list) {
+      join_data %<>%
+        dplyr::filter(!is.na(.data[[x]])) %>%
+        dplyr::mutate("{x}" := fct_lump_min(.data[[x]], min = 3)) %>%
+        dplyr::mutate("{x}" := forcats::fct_infreq(.data[[x]]))
+      
+      if ("Other" %in% levels(join_data[[x]])) {
+        join_data %<>%
+          dplyr::mutate("{x}" := fct_relevel(.data[[x]], "Other", after = Inf))
+      }
+    }
+    
+    return(join_data)
+  }
+  joinedData <- shiny::reactive({
+    return(.JoinData(shiny::req(data()), shiny::req(sqlData())))
   }, label = "joinedData")
   output$joinedData <- shiny::renderPrint({ joinedData() })
 
   output$examName <- shiny::renderText({
     shiny::req(dataValid())
     sub(" (**Webcam**) - Requires Respondus LockDown Browser",
-        "",
-        data()$'Test Info'[[1,1]],
-        fixed = TRUE)
+      "",
+      data()$'Test Info'[[1,1]],
+      fixed = TRUE)
   })
 
   nStudents <- shiny::renderText({
     shiny::req(dataValid())
-    data()$'Summary Statistics'[[1,2]]
+    return(data()$'Summary Statistics'[[1,2]])
   })
   output$nStudents <- shiny::renderText({ nStudents() })
     
@@ -184,19 +230,24 @@ server <- function(input, output, session) {
   })
   
   output$helper <- shiny::renderPrint({
-    joinedData() %>% names
-    #.DoAnalysis(joinedData(), "Total", "race")
+    #joinedData() %>% names
+    return (c(
+      .DoAnalysis(joinedData(), "Total", "race"),
+      .DoAnalysis(joinedData(), "10", "race")
+    ))
   })
   
   output$status <- shiny::renderPrint({ validateData() })
   
   output$detailOutput <- shiny::renderUI({
     shiny::req(joinedData())
+    shiny::req(nQuestions())
+    
     lapply(1:nQuestions(), function(x) {
       shiny::h4(x)
-      #shiny::div(renderPrint({
-      #  .DoAnalysis(joinedData(), as.character(x), "race")
-      #}))
+      shiny::div(renderPrint({
+        .DoAnalysis(joinedData(), as.character(x), "race")
+      }))
     })
   })
 }

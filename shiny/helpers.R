@@ -3,6 +3,7 @@
 if(interactive()) {
   library("jsonlite")
   library("multcomp")
+  library("emmeans")
   library("magrittr")
   library("readxl")
   # trim when shipping
@@ -13,20 +14,6 @@ if(interactive()) {
   library("shinydashboardPlus")
 }
 
-.FilterData <- function(data, y, x) {
-  data %<>%
-    dplyr::filter(!is.na(.data[[y]])) %>%
-    dplyr::mutate("{x}" := forcats::fct_infreq(.data[[x]])) %>%
-    dplyr::mutate("{x}" := fct_lump_min(.data[[x]], min = 3))
-  
-  if ("Other" %in% levels(data[[x]])) {
-    data %>%
-      dplyr::mutate("{x}" := fct_relevel(.data[[x]], "Other", after = Inf))
-  }
-  
-  return(data)
-}
-
 .Summarize <- function(data, y, x) {
   data %<>%
     dplyr::group_by(.data[[x]]) %>%
@@ -34,16 +21,20 @@ if(interactive()) {
   
   colnames(data)[[1]] <- "Group"
   
-  data %>%
-    dplyr::mutate(mean = ifelse(Group == "Other", NA_real_, mean))
+  data %<>%
+    dplyr::mutate(mean = ifelse(Group == "Other", NA_real_, mean)) %>%
+    return(.)
 }
 
 .QPEstimateEffects <- function(model, x) {
   v <- coef(model)
   names(v) <- sub(x, "", names(v))
   est <- outer(v, v, function(x,y) { round((exp(x-y)-1)*100, digits = 1) })
-  tibble::as_tibble(est) %>%
+  est %<>%
+    tibble::as_tibble(.) %>%
     tibble::add_column(Group = names(v), .before = 1)
+  
+  return(est)
 }
 
 
@@ -51,7 +42,7 @@ if(interactive()) {
   test <- pairwise.t.test(data[[as.character(y)]], data[[x]])
   p <- test$p.value
   last_group <- tail(rownames(p), 1)
-  p %>%
+  p %<>%
     tibble::as_tibble(.) %>%
     tibble::add_row(.before = 1) %>%
     tibble::add_column({{ last_group }} := 0, .after = Inf) %>%
@@ -59,9 +50,29 @@ if(interactive()) {
     magrittr::add(t(.)) %>%
     tibble::as_tibble(.) %>%
     tibble::add_column(Group = colnames(.), .before = 1)
+  
+  return(p)
 }
 
+.MakeMatrix <- function(groups, lower, upper = NULL) {
+  stopifnot(
+    is.character(groups),
+    is.numeric(lower)
+  )
+  if(is.null(upper)) upper <- lower
+  l <- length(groups)
+  m <- matrix(0, l, l)
+  dimnames(m) <- list(groups, groups)
+  m[lower.tri(m)] <- lower
+  m[upper.tri(m)] <- upper
+  m %>%
+    tibble::as_tibble(., rownames = NA) %>%
+    tibble::rownames_to_column(var = "Group") %>%
+    return(.)
+}
 
+# .DoAnalysis will eventually return an object for ALL x variables in the
+# given y variable, so the function signature will be (data, y, n = 3)
 .DoAnalysis <-  function(data, y, x, n = 3) {
   result <- list(
     error =  FALSE,
@@ -69,30 +80,56 @@ if(interactive()) {
     lens = x
   )
   
-  data %<>% .FilterData(., y, x)
-  
-  result$summary <-  .Summarize(data, y, x)
-  
-  data %<>%
-    dplyr::filter(.data[[x]] != "Other")
+  # filter missing observations
+  data %<>% dplyr::filter(is.numeric(.data[[y]]))
+  result$summary <- .Summarize(data, y, x)
+  data %<>% dplyr::filter(.data[[x]] != "Other")
   
   if(nrow(result$summary) > 1) {
-    # Allow for numeric response variable names.
-    frm <- stats::as.formula(stringr::str_glue("`{y}` ~ {x} - 1"))
-    #model <- glm(frm, binomial, data = data)
-    model <- glm(frm, quasipoisson(link = log), data = data)
-    effects <- .QPEstimateEffects(model, x)
-    pvalues <- .TPValues(data, y, x)
+    # fit combined model
+    formula <- stats::as.formula(
+      paste0("`", y, "` ~ race + FG + FT + pell - 1"))
+    if (y == "Total") {
+      model <- stats::glm(formula, quasipoisson(link = "log"), data = data) 
+    } else {
+      model <- stats::glm(formula, binomial(link = "logit"), data = data) 
+    }
+    
+    # perform Tukey contrasts with emmeans
+    contrasts <- emmeans::emmeans(model, as.character(x)) %>%
+      emmeans::contrast(
+        .,
+        method = "pairwise",
+        ratios = TRUE,
+        type = "response") %>%
+      tibble::as_tibble(.)
+    print(contrasts)
+    
+    # report the results list as a matrix of comparisons
+    if (y == "Total") {
+      # from ratio to percent-change
+      effects <- purrr::map_dbl(contrasts$ratio, ~ (.x - 1))
+      effects_rev <- purrr::map_dbl(contrasts$ratio, ~ 1 / .x - 1)
+      notes <- "Results are percentage change in total score between groups."
+    } else {
+      # from log(odds ratio) to odds ratio
+      effects <- contrasts$odds.ratio
+      effects_rev <- purrr::map_dbl(effects, ~ -1 * .x)
+      notes <- paste0("Results are how many times more or less",
+        "likely to answer correctly between groups.")
+    }
+    
+    groups <- levels(droplevels(data[[x]]))
+    effects <- .MakeMatrix(groups, effects, effects_rev)
+    pvalues <- .MakeMatrix(groups, contrasts$p.value)
     
     result$effects <- effects
     result$pvalues <- pvalues
+    result$notes <- notes
   } else {
     result$error = TRUE
-    result$message = "Cannot run analysis with only one significant group."
+    result$message = cat("Cannot run analysis with only one",
+      "significant group or where all outcomes are the same.")
   }
-  
   return(result)
-  
-  # staging for future version of .DoAnalysis
-  
 }
