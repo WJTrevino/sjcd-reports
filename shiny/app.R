@@ -135,6 +135,7 @@ server <- function(input, output, session) {
   })
   
   sqlData <- shiny::reactive({
+    # dummy SQL fetch -- to be replaced
     jsonlite::read_json("../secrets/test.json", simplifyVector = TRUE) %>%
       tibble::tibble(.) %>%
       return(.)

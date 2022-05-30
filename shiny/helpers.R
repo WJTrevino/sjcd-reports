@@ -81,14 +81,24 @@ if(interactive()) {
   )
   
   # filter missing observations
-  data %<>% dplyr::filter(is.numeric(.data[[y]]))
+  data %<>% dplyr::filter(is.numeric(.data[[y]]) & !is.na(.data[[y]]))
   result$summary <- .Summarize(data, y, x)
-  data %<>% dplyr::filter(.data[[x]] != "Other")
+  data %<>%
+    dplyr::filter(.data[[x]] != "Other") %>%
+    droplevels(.)
+  
+  # trim any variables that do not have at least 2 levels.
+  all_deps <- c("race", "gender", "FT", "FG", "pell")
+  valid_dep <- all_deps %>%
+    map(~ nlevels(data[[.x]])) %>%
+    is_greater_than(1)
+  deps <- all_deps[valid_dep]
+  
+  formula <- paste(paste0("`", y, "`"), "~", paste(deps, collapse = " + "))
+  formula %<>% stats::as.formula(.)
   
   if(nrow(result$summary) > 1) {
     # fit combined model
-    formula <- stats::as.formula(
-      paste0("`", y, "` ~ race + FG + FT + pell - 1"))
     if (y == "Total") {
       model <- stats::glm(formula, quasipoisson(link = "log"), data = data) 
     } else {
@@ -103,32 +113,31 @@ if(interactive()) {
         ratios = TRUE,
         type = "response") %>%
       tibble::as_tibble(.)
-    print(contrasts)
     
     # report the results list as a matrix of comparisons
     if (y == "Total") {
       # from ratio to percent-change
-      effects <- purrr::map_dbl(contrasts$ratio, ~ (.x - 1))
-      effects_rev <- purrr::map_dbl(contrasts$ratio, ~ 1 / .x - 1)
+      effects <- purrr::map_dbl(contrasts$ratio, ~ 100 * (.x - 1))
+      effects_rev <- purrr::map_dbl(contrasts$ratio, ~ 100 * (1/.x - 1))
       notes <- "Results are percentage change in total score between groups."
     } else {
       # from log(odds ratio) to odds ratio
-      effects <- contrasts$odds.ratio
+      effects <- round(contrasts$odds.ratio, digits = 1)
       effects_rev <- purrr::map_dbl(effects, ~ -1 * .x)
-      notes <- paste0("Results are how many times more or less",
+      notes <- paste("Results are how many times more or less",
         "likely to answer correctly between groups.")
     }
     
-    groups <- levels(droplevels(data[[x]]))
+    groups <- levels(data[[x]])
     effects <- .MakeMatrix(groups, effects, effects_rev)
-    pvalues <- .MakeMatrix(groups, contrasts$p.value)
+    pvalues <- .MakeMatrix(groups, round(contrasts$p.value, digits = 4))
     
     result$effects <- effects
     result$pvalues <- pvalues
     result$notes <- notes
   } else {
     result$error = TRUE
-    result$message = cat("Cannot run analysis with only one",
+    result$message = paste("Cannot run analysis with only one",
       "significant group or where all outcomes are the same.")
   }
   return(result)
