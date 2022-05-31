@@ -17,41 +17,13 @@ if(interactive()) {
 .Summarize <- function(data, y, x) {
   data %<>%
     dplyr::group_by(.data[[x]]) %>%
-    dplyr::summarize(mean = mean(.data[[y]]), n = n())
+    dplyr::summarize(mean = mean(.data[[y]]), n = dplyr::n())
   
   colnames(data)[[1]] <- "Group"
   
   data %<>%
     dplyr::mutate(mean = ifelse(Group == "Other", NA_real_, mean)) %>%
     return(.)
-}
-
-.QPEstimateEffects <- function(model, x) {
-  v <- coef(model)
-  names(v) <- sub(x, "", names(v))
-  est <- outer(v, v, function(x,y) { round((exp(x-y)-1)*100, digits = 1) })
-  est %<>%
-    tibble::as_tibble(.) %>%
-    tibble::add_column(Group = names(v), .before = 1)
-  
-  return(est)
-}
-
-
-.TPValues = function(data, y, x) {
-  test <- pairwise.t.test(data[[as.character(y)]], data[[x]])
-  p <- test$p.value
-  last_group <- tail(rownames(p), 1)
-  p %<>%
-    tibble::as_tibble(.) %>%
-    tibble::add_row(.before = 1) %>%
-    tibble::add_column({{ last_group }} := 0, .after = Inf) %>%
-    purrr::map_df(function(x) { coalesce(x, 0) }) %>%
-    magrittr::add(t(.)) %>%
-    tibble::as_tibble(.) %>%
-    tibble::add_column(Group = colnames(.), .before = 1)
-  
-  return(p)
 }
 
 .MakeMatrix <- function(groups, lower, upper = NULL) {
@@ -90,14 +62,14 @@ if(interactive()) {
   # trim any variables that do not have at least 2 levels.
   all_deps <- c("race", "gender", "FT", "FG", "pell")
   valid_dep <- all_deps %>%
-    map(~ nlevels(data[[.x]])) %>%
-    is_greater_than(1)
+    purrr::map(~ nlevels(data[[.x]])) %>%
+    magrittr::is_greater_than(1)
   deps <- all_deps[valid_dep]
   
   formula <- paste(paste0("`", y, "`"), "~", paste(deps, collapse = " + "))
   formula %<>% stats::as.formula(.)
   
-  if(nrow(result$summary) > 1) {
+  if(x %in% deps) {
     # fit combined model
     if (y == "Total") {
       model <- stats::glm(formula, quasipoisson(link = "log"), data = data) 

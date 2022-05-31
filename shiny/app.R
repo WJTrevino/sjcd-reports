@@ -44,23 +44,20 @@ ui <- shiny::fluidPage(
             "Goals: ",
             shiny::textOutput("nGoals", inline = TRUE)
           ),
-          shiny::actionButton(
-            "doSummaryAnalysis",
-            "Run Summary",
-            icon = shiny::icon("calculator")
-          ),
           shiny::br(),
           shiny::actionButton(
             "doQuestionAnalysis",
-            "Run Question Analysis",
+            "Run Detail Analysis ",
             icon = shiny::icon("calculator")
-          )
+          ),
+          shiny::helpText("Detail analysis is more speculative and",
+                          "will take longer to compute.")
       )
     ),
     shiny::helpText(shiny::textOutput("status"))
   ),
   shiny::mainPanel(
-    shiny::verbatimTextOutput("helper")
+    DT::DTOutput("helper")
   )
 )
 
@@ -184,12 +181,13 @@ server <- function(input, output, session) {
     for(x in var_list) {
       join_data %<>%
         dplyr::filter(!is.na(.data[[x]])) %>%
-        dplyr::mutate("{x}" := fct_lump_min(.data[[x]], min = 3)) %>%
+        dplyr::mutate("{x}" := forcats::fct_lump_min(.data[[x]], min = 3)) %>%
         dplyr::mutate("{x}" := forcats::fct_infreq(.data[[x]]))
       
       if ("Other" %in% levels(join_data[[x]])) {
         join_data %<>%
-          dplyr::mutate("{x}" := fct_relevel(.data[[x]], "Other", after = Inf))
+          dplyr::mutate("{x}" := forcats::fct_relevel(
+            .data[[x]], "Other", after = Inf))
       }
     }
     
@@ -222,21 +220,22 @@ server <- function(input, output, session) {
   
   nGoals <- shiny::renderText({
     shiny::req(dataValid())
-    data()$'Summary Statistics'[[2,2]]
+    length(data()$'Goals Summary'$Goals)
   })
-  output$nGoals <- shiny::renderText({ nQuestions() })
+  output$nGoals <- shiny::renderText({ nGoals() })
   
   output$file <- shiny::renderText({
     input$file
   })
   
-  output$helper <- shiny::renderPrint({
-    #joinedData() %>% names
-    return (c(
-      .DoAnalysis(joinedData(), "Total", "race"),
-      .DoAnalysis(joinedData(), "10", "race")
-    ))
-  })
+  output$helper <- DT::renderDataTable({
+    shiny::req(dataValid())
+    .DoAnalysis(joinedData(), "Total", "race") %$%
+      tibble::rowid_to_column(effects, var = "#")
+  },
+  class = "compact stripe",
+  rownames = FALSE
+  )
   
   output$status <- shiny::renderPrint({ validateData() })
   
