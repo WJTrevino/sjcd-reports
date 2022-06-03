@@ -15,6 +15,113 @@ library("shinydashboardPlus")
 # Load Helpers ===============================================================
 source("helpers.R")
 
+# Module: Result Table (Multi-Comparison)=====================================
+multiTableUI <- function(id) {
+  ns <- shiny::NS(id)
+  
+  shiny::tagList(
+    shiny::conditionalPanel(
+      condition = "1 == 1",
+      shiny::verbatimTextOutput(ns("selected")),
+      DT::DTOutput(ns("table")),
+      shiny::helpText(
+        shiny::textOutput(
+          ns("interpretation"),
+          inline = TRUE
+        )
+      )
+    )
+  )
+}
+multiTableServer <- function(id, data = NULL, odds_ratios = FALSE) {
+  shiny::moduleServer(
+    id,
+    function(input, output, session) {
+      # notes
+      l <- shiny::reactive({
+        data %>%
+          dplyr::filter(Group != "Other") %>%
+          nrow
+      })
+      
+      m <- shiny::observe({
+        paste(input$table_cells_selected, collapse = ", ")
+      })
+      
+      output$table <- DT::renderDT({
+        data
+        },
+        class = "compact stripe",
+        rownames = FALSE,
+        options = list(
+          ordering = FALSE,
+          searching = FALSE,
+          paging = FALSE,
+          info = FALSE,
+          # https://datatables.net/reference/option/infoCallback
+          rowCallback = DT::JS(
+            'function(row, data) {',
+            '  for (x in data) {',
+            '     console.log(data[x]);',
+            '     if(data[x] == null) {',
+            '       $("td:eq("+x+")", row).html("—");',
+            '     }',
+            '  }',
+            '}'
+          )
+        ),
+        # callback = DT::JS('console.info("Done rendering table.");'),
+        # caption = ""
+        selection = list(
+          target = "cell",
+          mode = "single",
+          selectable = as.matrix(expand.grid(1:l(), 2:(l()+1)))
+        ),
+      )
+      
+      output$interpretation = shiny::renderText({
+        s <- input$table_cells_selected
+        if(length(s) == 0) return("Select a cell for interpretation.")
+        r <- s[1,1]
+        c <- s[1,2]
+        if(r == c - 1) return("Cannot compare a group to itself.")
+        if(!odds_ratios) {
+          stringr::str_glue(
+            "Group ({data[[r, 1]]}) scored",
+            "{abs(round(data[[r, c+1]], digits = 2))}%",
+            ifelse(data[[r, c+1]] > 0, "higher", "lower"),
+            "than group ({data[[c-1, 1]]}).",
+            .sep = " "
+          )
+        } else {
+          stringr::str_glue(
+            "Group ({data[[r, 1]]}) is",
+            "{abs(round(data[[r, c+1]], digits = 1))} times as",
+            "likely than group ({data[[c-1, 1]]}) to answer correctly.",
+            .sep = " "
+          )
+        }
+      })
+    }
+  )
+}
+
+# Module: Result Table (Single Comparisons) ==================================
+singleTableUI <- function(id) {
+  ns <- shiny::NS(id)
+  shiny::tagList(
+    shiny::div("Placeholder")
+  )
+}
+singleTableServer <- function(id, data = NULL, odds_ratios = FALSE) {
+  shiny::moduleServer(
+    id,
+    function(input, output, session) {
+      # notes
+    }
+  )
+}
+
 # UI Definition ==============================================================
 ui <- shiny::fluidPage(
   title = "EAC DEI Report",
@@ -57,7 +164,7 @@ ui <- shiny::fluidPage(
     shiny::helpText(shiny::textOutput("status"))
   ),
   shiny::mainPanel(
-    DT::DTOutput("helper")
+    multiTableUI("1")
   )
 )
 
@@ -230,13 +337,11 @@ server <- function(input, output, session) {
   
   output$helper <- DT::renderDataTable({
     shiny::req(dataValid())
-    .DoAnalysis(joinedData(), "Total", "race") %$%
-      tibble::rowid_to_column(effects, var = "#")
+    .DoAnalysis(joinedData(), "Total", "race")$effects
   },
   class = "compact stripe",
   rownames = FALSE
   )
-  
   output$status <- shiny::renderPrint({ validateData() })
   
   output$detailOutput <- shiny::renderUI({
@@ -250,6 +355,9 @@ server <- function(input, output, session) {
       }))
     })
   })
+  
+  multiTableServer("1", data = .DoAnalysis(joinedData(), "4", "race")$effects, odds_ratios = TRUE)
+  singleTableServer("2", data = .DoAnalysis(joinedData(), "4", "race")$effects, odds_ratios = TRUE)
 }
 
 # Return App Object ==========================================================
